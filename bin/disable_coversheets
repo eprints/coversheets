@@ -1,0 +1,5 @@
+#!/usr/bin/bash
+d=`dirname $0`
+dir=`cd $d; pwd`
+echo $dir
+date -d "$2 minutes" +%s > $dir/../../../archives/$1/var/disable_coversheets.timestamp

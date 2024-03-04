@@ -1,0 +1,52 @@
+#!/usr/bin/perl -w
+
+use FindBin;
+use lib "$FindBin::Bin/../../../perl_lib";
+
+use strict;
+use EPrints;
+
+if( scalar( @ARGV ) != 2 )
+{
+        print "\nWrong arguments: repoid doc_id\n";
+        exit(1);
+}
+
+my $session = new EPrints::Session( 1, $ARGV[0] ) or die("cant create Session object");
+my $ds = $session->get_repository->get_dataset( "document" );
+my $doc = $ds->get_object( $session, $ARGV[1] );
+my $eprint = $doc->get_eprint;
+my $coversheet = EPrints::DataObj::Coversheet->search_by_eprint( $session, $eprint );
+my $regenerate = 1;
+my $current_cs_id = $doc->get_value( 'coversheetid' ) || -1; # coversheet used to cover document
+my $coverdoc = $coversheet->get_coversheet_doc( $doc );
+if( defined $coverdoc )
+{
+        # remove existing covered version
+        $doc->get_eprint->set_under_construction( 1 );
+        $doc->remove_object_relations( $coverdoc ); # may not be required?
+        $coverdoc->remove();
+        $doc->get_eprint->set_under_construction( 0 );
+}
+my $plugin = $session->plugin( "Convert::AddCoversheet" );
+unless( defined $plugin )
+{
+	print STDERR "ERROR: Convert::AddCoversheet plugin not defined.\n";
+	exit
+}
+my $pages = $coversheet->get_pages || exit;
+$plugin->{_pages} = $pages;
+my $newcoverdoc = $plugin->convert( $doc->get_eprint, $doc, "application/pdf" );
+unless( defined $newcoverdoc )
+{
+	print STDERR "ERROR: Could not retrieve new coversheet template.\n";
+        exit;
+}
+$newcoverdoc->add_relation( $doc, "isCoversheetVersionOf" );
+$doc->get_eprint->set_under_construction( 1 );
+$newcoverdoc->set_value( "security", $doc->get_value( "security" ) );
+$newcoverdoc->commit;
+$doc->set_value( 'coversheetid', $coversheet->get_id );
+$doc->commit;
+$doc->get_eprint->set_under_construction( 0 );
+

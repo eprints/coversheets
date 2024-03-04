@@ -1,0 +1,133 @@
+#!/usr/bin/perl -w
+
+use FindBin;
+use lib "$FindBin::Bin/../../../perl_lib";
+
+use strict;
+use warnings;
+
+use utf8;
+
+use EPrints;
+use Getopt::Long;
+
+my $verbose = 0;
+my $help = 0;
+
+GetOptions( 
+	'verbose' => \$verbose,
+	'help|?' => \$help,
+) || usage() ;
+
+if( $help )
+{
+	usage();
+}
+
+if( scalar( @ARGV ) != 1 )
+{
+	usage();
+}
+
+my $session = new EPrints::Session( 1, $ARGV[0] ) or die("Couldn't load archive \"$ARGV[0]\"");
+
+# Ensure that coversheet template hashes are correct.
+
+sub update_coversheet_file_hashes
+{
+	my( $session ) = @_;
+
+	foreach my $coversheet ( $session->dataset( "coversheet" )->search->get_records )
+	{
+		foreach my $fieldname ( qw( frontfile backfile ) )
+		{
+			my $path = $coversheet->get_file_path( $fieldname );
+
+			print "Updating $fieldname hash for coversheet " . $coversheet->id . "\n" if $verbose;
+
+			if( defined( $path ))
+			{
+				$coversheet->set_value( $fieldname . "_hash", Digest::SHA->new(1)->addfile( $path )->hexdigest );
+			}
+			else
+			{
+				$coversheet->set_value( $fieldname . "_hash", undef );
+			}
+		}
+
+		$coversheet->commit();
+	}
+}
+
+sub update_coversheets_dirty
+{
+	my( $session, $from, $to ) = @_;
+
+	my $desc = "Changing coversheet dirty bit (" . ( $from eq "" ? "NULL" : $from ) . " -> " . $to . ")";
+
+	my $dataset = $session->dataset( "eprint" );
+
+	my $searchexp = new EPrints::Search(
+		session => $session,
+		dataset => $dataset
+	);
+
+	$searchexp->add_field(
+		fields => [
+			$dataset->field( "coversheets_dirty" )
+		],
+		value => ( $from eq "" ? undef : $from ),
+		match => "EX"
+	);
+
+	my $list = $searchexp->perform_search;
+	my $total = scalar( @{ $list->{ids} } );
+	my $count = 0;
+
+	$list->map( sub {
+
+		my( $session, $dataset, $eprint ) = @_;
+
+		$eprint->set_value( "coversheets_dirty", $to );
+		$eprint->commit();
+
+		if( $verbose )
+		{
+			if( !( $count % 5 ))
+			{
+				print $desc . ": $count of $total\n" ;
+			}
+
+			$count++;
+		}
+	} );
+
+	print $desc . ": complete\n" if $verbose;
+}
+
+update_coversheet_file_hashes( $session );
+
+update_coversheets_dirty( $session, 0, "FALSE" );
+update_coversheets_dirty( $session, 1, "TRUE" );
+update_coversheets_dirty( $session, "", "FALSE" );
+
+print "Script completed successfully.\n" if $verbose;
+
+$session->terminate;
+exit( 1 );
+
+sub usage
+{
+	print <<USAGE;
+
+$0 ARCHIVE
+
+\t--verbose    Enable verbose mode
+\t--help       Show this help
+
+USAGE
+
+exit( 1 );
+}
+
+1;

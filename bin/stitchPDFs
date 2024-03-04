@@ -1,0 +1,10 @@
+#/bin/bash
+dir=`dirname $0`
+
+if [ $# -eq 3 ]
+then
+	# for compatibility with old eprints config we use the order: outputfile firstPDF secondPDF
+	java -Xmx1G -jar "$dir/pdfbox-app.jar" merge -i="$2" -i="$3" -o="$1"
+else
+	echo "Usage: stitchPDFs <outputfile> <coversheet> <originalfile>"
+fi

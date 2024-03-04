@@ -1,0 +1,516 @@
+#!/usr/bin/perl -w
+
+use FindBin;
+use lib "$FindBin::Bin/../../../perl_lib";
+
+use strict;
+use warnings;
+
+use utf8;
+
+use EPrints;
+use FindBin;
+use Getopt::Long;
+use File::Copy;
+use Cwd;
+use File::Temp;
+use Archive::Zip qw( :ERROR_CODES :CONSTANTS );
+use File::Slurp;
+use HTML::Entities;
+
+my $help = 0;
+my $specific_eprintid;
+my $verbose = 0;
+my $force = 0;
+
+GetOptions( 
+	'help|?' => \$help,
+	'eprintid=i' => \$specific_eprintid,
+	'force' => \$force,
+	'verbose+' => \$verbose,
+) || usage() ;
+
+if( $help )
+{
+	usage();
+}
+
+my $session = new EPrints::Session( 1, $ARGV[0] ) or die("Can't create session object.");
+
+#will check to see if openoffice is running.
+sub oo_is_running
+{
+	my( $session ) = @_;
+
+	my $oosrv = EPrints::OpenOfficeService->new( session => $session );
+
+	return 0 unless( defined $oosrv && $oosrv->is_running() );
+	return 1;
+}
+
+sub valid_pdf
+{
+	my( $filename ) = @_;
+	
+	open( my $fh, '<:raw', $filename ) || return;
+	binmode( $fh );
+	
+	my $buf;
+	
+	# Read in four bytes, failing if we can't do that.
+	
+	if( sysread( $fh, $buf, 4 ) != 4 )
+	{
+		return;
+	}
+	
+	# Compare the first four bytes to "%PDF"
+	
+	return $buf eq "%PDF";
+}
+
+sub prepare_pages
+{
+	my ($session, $doc, $pages, $temp_dir, $control ) = @_;
+	my $eprint = $doc->get_eprint;
+
+	my $tags = $session->config( 'coversheet', 'tags' );
+	my $status = undef;
+
+	foreach my $coversheet_page (keys %{$pages})
+	{
+		my $filetype = $pages->{$coversheet_page}->{type};
+		my $file_path = $pages->{$coversheet_page}->{path};
+
+		next if( $filetype eq 'none' );
+
+		if ($filetype eq 'odt')
+		{
+			if( !oo_is_running( $session ))
+			{
+				$control->{pipeline_in_error} = 1;
+				return "OpenOffice is not running";
+			}
+
+			my $odt_zip = Archive::Zip->new();
+
+			my $content_file = "$temp_dir/content.xml";
+			my $cover_odt_name = "$temp_dir/$coversheet_page.odt";
+
+			unless ( $odt_zip->read( $file_path ) == AZ_OK )
+			{
+				return "Could not read coversheet template file";
+			}
+
+			unless ( $odt_zip->extractMember( 'content.xml', $content_file ) == AZ_OK )
+			{
+				return "Couldn't extract from template file";
+			}
+
+			my $content_xml = read_file( $content_file );
+
+			foreach my $tag ( keys %{$tags} )
+			{
+				if( $content_xml =~ /##$tag##/ )
+				{
+					eval
+					{
+						my $replacement = HTML::Entities::encode_entities( Encode::encode_utf8( &{$tags->{$tag}}($eprint, $doc)), '&<>' );
+
+						$content_xml =~ s/##$tag##/$replacement/g;
+					}
+				}
+			}
+
+			open (FILE, "> $content_file") || return "problem opening $content_file\n";
+			print FILE $content_xml;
+			close(FILE);
+
+			if( !defined( $odt_zip->updateMember( 'content.xml', $content_file ) ) )
+			{
+				return "Couldn't update content.xml when replacing tags.";
+			}
+
+			unless ( $odt_zip->writeToFileNamed( $cover_odt_name ) == AZ_OK )
+			{
+				return "Couldn't create cover version of the template file.";
+			}
+
+			EPrints::Utils::chown_for_eprints( $cover_odt_name );
+
+			#end of search and replace
+
+			#convert to pdf
+			if ( $session->config( 'executables', 'uno_converter' ) =~ "DocumentConverter.py" || $session->config( 'executables', 'uno_converter' ) =~ "unoconvert" )
+			{
+				#print STDERR "Coversheet invocation: " .  $session->config( 'executables', 'python' ) . " " $session->config( 'executables', 'uno_converter' ) . " $temp_dir/$coversheet_page.odt $temp_dir/$coversheet_page.pdf\n";
+				system(
+					$session->config( 'executables', 'python' ),
+					$session->config( 'executables', 'uno_converter' ),
+					"$temp_dir/$coversheet_page.odt",
+					"$temp_dir/$coversheet_page.pdf",
+			      	);
+			}
+			else
+			{
+				#print STDERR "Coversheet invocation: " . $session->config( 'executables', 'uno_converter' ) . " $temp_dir/$coversheet_page.odt\n";
+				system(
+					$session->config( 'executables', 'uno_converter' ),
+					"$temp_dir/$coversheet_page.odt",
+                                );
+			}
+
+			#end of convert to pdf
+			unlink "$temp_dir/$coversheet_page.odt";
+
+			unless( -e "$temp_dir/$coversheet_page.pdf" )
+			{
+				$status = "Failed to add coversheet to document '".$doc->get_id."'";
+				$control->{document_in_error} = 1;
+			}
+		}
+		elsif ($filetype eq 'pdf')
+		{
+			copy($file_path, $temp_dir . "/$coversheet_page.pdf");
+		}
+		else
+		{
+			$status = "Cannot handle coversheet of format '$filetype'";
+			$control->{pipeline_in_error} = 1;
+		}
+	}
+
+	return $status;
+}
+
+sub process_coverdoc
+{
+	my ( $doc, $control ) = @_;
+
+	my $eprint = $doc->get_eprint;
+
+	# search for a coversheet that can be applied to this document
+	my $coversheet = EPrints::DataObj::Coversheet->search_by_doc( $doc );
+	return "No coversheet applicable" unless defined $coversheet;
+
+	# check whether there is an existing covered version and whether it needs to be regenerated
+	my $current_cs_id = $doc->get_value( 'coversheetid' ) || -1; # coversheet used to cover document
+	my $coverdoc; # existing covered version
+
+	if( EPrints::Utils::is_set( $coversheet ) && $current_cs_id > 0 )
+	{
+		# get the covered version of the document
+		$coverdoc = $coversheet->get_coversheet_doc( $doc );
+	}
+
+	if( defined $coverdoc )
+	{
+		# remove existing covered version
+		$doc->get_eprint->set_under_construction( 1 );
+		$doc->remove_object_relations( $coverdoc ); # may not be required?
+		$coverdoc->remove();
+		$doc->get_eprint->set_under_construction( 0 );
+	}
+
+	# generate new covered version
+	my $pages = $coversheet->get_pages;
+
+	if( !$pages )
+	{
+		$control->{pipeline_in_error} = 1;
+		return "Coversheet template has no pages";
+	}
+
+	my $target_dir = File::Temp::newdir();
+
+	my $temp_dir = File::Temp->newdir( "ep-coversheetXXXX", TMPDIR => 1 );
+
+	my $prepare_pages_status = prepare_pages($session, $doc, $pages, $temp_dir, $control);
+
+	if( $prepare_pages_status )
+	{
+		return $prepare_pages_status;
+	}
+
+	my $frontfile_path = $temp_dir . '/frontfile.pdf';
+	my $backfile_path = $temp_dir . '/backfile.pdf';
+
+	if ( ($pages->{frontfile}->{path} && ! -e $frontfile_path) || ($pages->{backfile}->{path} && ! -e $backfile_path) )
+	{
+		$session->log( "[Convert::AddCoversheet] Unexpected absence of coversheet files." );
+		$control->{pipeline_in_error} = 1;
+		return;
+	}
+
+	unless( -d $target_dir )
+	{
+		EPrints::Platform::mkdir( $target_dir );
+	}
+
+	my @doc_main_bits = split( '/', $doc->get_main );
+	my $output_file = EPrints::Platform::join_path( $target_dir, $doc_main_bits[$#doc_main_bits] );
+
+	#my $output_file = $target_dir . '/' . $doc->get_main;
+	if( -e $output_file )
+	{
+		# remove old covered file
+		unlink( $output_file );
+	}
+
+	# EPrints Services/tmb 2011-08-26 get properly escaped filename via File dataobj
+	#my $doc_path = $doc->local_path."/".$doc->get_main;
+	my $stored_file = $doc->get_stored_file( $doc->get_main );
+
+	if( !defined( $stored_file ))
+	{
+		$control->{document_in_error} = 1;
+		return "There is no stored file";
+	}
+
+	my $doc_path = $stored_file->get_local_copy();
+
+	if( !defined( $doc_path ))
+	{
+		$control->{document_in_error} = 1;
+		return "Cannot locate local copy of document";
+	}
+
+	if( !valid_pdf( $doc_path ) )
+	{
+		$control->{document_in_error} = 1;
+		return "Stored document is not a PDF file.";
+	}
+
+	my @input_files;
+	push @input_files, $frontfile_path if( -e $frontfile_path );
+	push @input_files, $doc_path;
+	push @input_files, $backfile_path if( -e $backfile_path );
+
+	my $temp_output_dir = File::Temp->newdir( "ep-coversheet-finishedXXXX", TMPDIR => 1 );
+	my $temp_output_file = $temp_dir.'/temp.pdf';
+
+	# EPrints Services/pjw Modification to use Ghostscript rather than pdftk 
+	my $gs_cmd = $session->get_repository->get_conf( "gs_pdf_stich_cmd" );
+	# add the output file
+	$gs_cmd .= $temp_output_file;
+	# add the input files
+	foreach my $input_file (@input_files)
+	{
+		$gs_cmd .= " '$input_file'";
+	}
+
+	#print STDERR "PDF Merge invocation: $gs_cmd\n";
+
+	my $sys_call_status = system($gs_cmd);
+	# check it worked
+	if (0 == $sys_call_status)
+	{
+		copy($temp_output_file, $output_file);
+	}
+	else
+	{
+		$session->log("[Convert::AddCoversheet] Ghostscript could not create '$output_file'. Check the PDF is not password-protected.");
+		$control->{document_in_error} = 1;
+		return "Could not create the coversheet version of the document";
+	}
+
+	EPrints::Utils::chown_for_eprints( $output_file );
+
+	my $filename = $doc->get_main;
+
+	my @filedata;
+
+	my $fh;
+
+	my $epdata = undef;
+
+	unless( open($fh, "<", $output_file) )
+	{
+		$session->get_repository->log( "Error reading from $output_file: $!" );
+		$control->{document_in_error} = 1;
+		return "Couldn't read file";
+	}
+
+	$session->run_trigger( EPrints::Const::EP_TRIGGER_MEDIA_INFO,
+		filepath => $output_file,
+		filename => $filename,
+		epdata => my $media_info = {}
+	);
+
+	push @filedata, {
+		filename => $filename,
+		filesize => (-s $output_file),
+		url => "file://$output_file",
+		mime_type => $media_info->{mime_type},
+		_content => $fh,
+	};
+	# file is closed after object creation
+
+	my $doc_ds = $session->dataset( "document" );
+	$doc->get_eprint->set_under_construction( 1 );
+	my $new_doc = $doc_ds->create_object( $session, { 
+		files => \@filedata,
+		main => $filename,
+		eprintid => $eprint->get_id,
+		_parent => $eprint,
+		format => "other",
+		mime_type => $filedata[0]->{mime_type},
+		security => $doc->value( "security" ),
+		formatdesc => 'Coversheet version',
+		relation => [{
+			type => EPrints::Utils::make_relation( "isVersionOf" ),
+			uri => $doc->internal_uri(),
+		},{
+			type => EPrints::Utils::make_relation( "isVolatileVersionOf" ),
+			uri => $doc->internal_uri(),
+		}],
+		%{$epdata||{}},
+	} );
+	$doc->get_eprint->set_under_construction( 0 );
+
+	close( $fh );	
+
+	if( !defined $new_doc )
+	{
+		$session->log( "Failed to create document object during conversion: check your storage configuration" );
+		$control->{document_in_error} = 1;
+		return ();
+	}
+
+	my $newcoverdoc = $new_doc;
+
+	# add relation to new covered version
+	$newcoverdoc->add_relation( $doc, "isCoversheetVersionOf" );
+
+	$doc->get_eprint->set_under_construction( 1 );
+
+	$doc->set_value( "coverdata_hash", EPrints::DataObj::Coversheet->calculate_coverdata_hash( $session, $doc->get_eprint, $doc ));
+
+	$doc->set_value( "coversheet_frontfile_hash", $coversheet->get_value( "frontfile_hash" ));
+	$doc->set_value( "coversheet_backfile_hash",  $coversheet->get_value( "backfile_hash" ));
+
+	# http://servicesjira.eprints.org:8080/browse/BATH-62
+	# add the correct security setting
+	# when the security setting changes on the original document, this will change the eprint.lastmod
+	# which will generate a new coversheet
+	$newcoverdoc->set_value( "security", $doc->get_value( "security" ) );
+	$newcoverdoc->commit;
+	
+	# record which coversheet was used
+	$doc->set_value( 'coversheetid', $coversheet->get_id );
+	$doc->commit;
+	
+	$doc->get_eprint->set_under_construction( 0 );
+
+	return undef;
+}
+
+if( !defined $ARGV[1] )
+{
+	print "\nUsage is:";
+	print "\n\t{that script} repository_id limit\n\n";
+	exit(1);
+}
+
+my $limit = $ARGV[1];
+
+my $ds = $session->dataset( 'eprint' );
+
+my $search = EPrints::Search->new(
+	session => $session,
+	dataset => $session->dataset( 'eprint' ),
+	custom_order => '-lastmod',
+	allow_blank => 1,
+	limit => $limit
+);
+
+if( defined $specific_eprintid )
+{
+	$search->add_field( $ds->get_field( "eprintid" ), $specific_eprintid );
+}
+
+if( !$force )
+{
+	$search->add_field( $ds->get_field( "coversheets_dirty" ), "TRUE" );
+}
+
+my $list = $search->perform_search;
+
+$list->map( sub {
+
+	my( $session, $ds, $eprint ) = @_;
+
+	my @docs = $eprint->get_all_documents;
+	my $eprint_id = $eprint->get_value( 'eprintid' );
+
+	print "--> Processing eprint $eprint_id:\n" if $verbose;
+
+	my $errors_detected = 0;
+	my $pipeline_error_detected = 0;
+
+	foreach my $doc ( $eprint->get_all_documents )
+	{
+		my $control = { document_in_error => 0 };
+
+		my $doc_id = $doc->get_value( 'docid' );
+		my $coversheet = EPrints::DataObj::Coversheet->search_by_doc( $doc );
+
+		if( $coversheet )
+		{
+			my $coverdoc_error = process_coverdoc( $doc, $control );
+
+			print "-->     Generating cover for document $doc_id: " .
+				($coverdoc_error ? $coverdoc_error : "Coverdoc generated") . "\n" if $verbose;
+
+			if( !$verbose && $coverdoc_error )
+			{
+				print STDERR "Coversheet error: EPrint $eprint_id, Doc $doc_id, Reason: $coverdoc_error\n";
+			}
+		}
+
+		if( $control->{document_in_error} )
+		{
+			$doc->set_value( 'coversheet_error', 1 );
+			$doc->commit();
+
+			$errors_detected = 1;
+		}
+
+		if( $control->{pipeline_in_error} )
+		{
+			$pipeline_error_detected = 1;
+		}
+	}
+
+	# Don't try and save if there was a pipeline error. This happens if
+	# OpenOffice isn't running, it is not configured properly or there are
+	# problems with the coversheet template, etc.
+
+	if( !$pipeline_error_detected )
+	{
+		$eprint->set_value( 'coversheets_dirty', 'FALSE' );
+		$eprint->commit();
+	}
+} );
+
+print "Script completed successfully.\n" if $verbose;
+
+$session->terminate;
+exit( 1 );
+
+sub usage
+{
+	print <<USAGE;
+
+$0 ARCHIVE LIMIT [--eprintid <id>] [--force] [--verbose]
+
+\t--eprintid: process a specific eprintid
+\t--force:    process coversheet anyway
+\t--verbose:  displays extra information
+
+USAGE
+
+exit( 1 );
+}
+
+1;

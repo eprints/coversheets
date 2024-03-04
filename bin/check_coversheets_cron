@@ -1,0 +1,15 @@
+#!/usr/bin/bash
+d=`dirname $0`
+dir=`cd $d; pwd`
+if [ "$#" -ne 2 ]; then
+    echo -e "\nUsage: $dir/check_coversheets_cron <ARCHIVE_ID> <EPRINTS_TO_COVERSHEET>\n\nE.g. $dir/check_coversheets_cron my_archive 50\n"
+	exit 1;
+fi
+dis_cov_ts_file="$dir/../../../archives/$1/var/disable_coversheets.timestamp"
+if [[ -e $dis_cov_ts_file &&  ( ! -s $dis_cov_ts_file || `cat $dis_cov_ts_file` -gt `date +%s` ) ]]; then
+	exit 2;
+else
+	touch $dis_cov_ts_file
+	$dir/check_coversheets $1 $2 2>&1 | grep -v -f $dir/ignore_warnings.txt
+	rm $dis_cov_ts_file
+fi
