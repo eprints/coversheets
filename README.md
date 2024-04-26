@@ -33,4 +33,4 @@ This ingredients also requires the [openoffice ingredient](https://github.com/ep
 
 ## Further Information
 
-See https://wiki.eprints.org/w/Coversheets\_Ingredient
+See https://wiki.eprints.org/w/Coversheets_Ingredient
