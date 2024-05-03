@@ -21,12 +21,10 @@ use HTML::Entities;
 my $help = 0;
 my $specific_eprintid;
 my $verbose = 0;
-my $force = 0;
 
 GetOptions( 
 	'help|?' => \$help,
 	'eprintid=i' => \$specific_eprintid,
-	'force' => \$force,
 	'verbose+' => \$verbose,
 ) || usage() ;
 
@@ -428,8 +426,7 @@ if( defined $specific_eprintid )
 {
 	$search->add_field( $ds->get_field( "eprintid" ), $specific_eprintid );
 }
-
-if( !$force )
+else
 {
 	$search->add_field( $ds->get_field( "coversheets_dirty" ), "TRUE" );
 }
@@ -502,10 +499,9 @@ sub usage
 {
 	print <<USAGE;
 
-$0 ARCHIVE LIMIT [--eprintid <id>] [--force] [--verbose]
+$0 ARCHIVE LIMIT [--eprintid <id>] [--verbose]
 
 \t--eprintid: process a specific eprintid
-\t--force:    process coversheet anyway
 \t--verbose:  displays extra information
 
 USAGE
