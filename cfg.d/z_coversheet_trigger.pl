@@ -41,9 +41,13 @@ $c->add_trigger( EP_TRIGGER_DOC_URL_REWRITE, sub
 	{
 		# return the covered version
 		$coverdoc->set_value( "security", $doc->get_value( "security" ) );
-		$request->pnotes( filename => $coverdoc->get_main );
 		$request->pnotes( document => $coverdoc );
 		$request->pnotes( dataobj => $coverdoc );
+
+		# Only update request filename to coverdoc's filename if it is defined and the document filename matches that used in the request.  
+		# If the document filename does not match that used in the request, then not updating the filename will mean requests with a
+		# spurious filename will get a 404 error (same as uncoversheeted documents) rather than returning the document under a spurious filename.
+		$request->pnotes( filename => $coverdoc->get_main ) if defined $coverdoc->get_main && defined $doc->get_main && $filename eq $doc->get_main;
 	}
 
 	# return the uncovered document
