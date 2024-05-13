@@ -7,5 +7,7 @@ COSObject
 COSArray
 PDNumberTreeNode
 endstreamendobj
+parseCOSDictionaryNameValuePair
 parseCOSStream
+std::bad_alloc
 validateStreamLength
