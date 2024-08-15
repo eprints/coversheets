@@ -1,12 +1,14 @@
-Use of uninitialized value in lc at /usr/local/share/perl5/OpenOffice/OODoc/File.pm line 378.
-Fatal Python error: PyImport_GetModuleDict: no module dictionary!
-Leaking python objects bridged to UNO for reason pyuno runtime is not initialized, (the pyuno.bootstrap needs to be called before using any uno classes)
-The end of the stream doesn't point to the correct offset
+COSArray
+COSDictionary
 COSName
 COSObject
-COSArray
+Fatal Python error: PyImport_GetModuleDict: no module dictionary!
+Leaking python objects bridged to UNO for reason pyuno runtime is not initialized, (the pyuno.bootstrap needs to be called before using any uno classes)
 PDNumberTreeNode
+The end of the stream doesn't point to the correct offset
+Use of uninitialized value in lc at /usr/local/share/perl5/OpenOffice/OODoc/File.pm line 378.
 endstreamendobj
+hasSelfReference
 parseCOSDictionaryNameValuePair
 parseCOSStream
 std::bad_alloc
