@@ -22,7 +22,7 @@ my $help = 0;
 my $specific_eprintid;
 my $verbose = 0;
 
-GetOptions( 
+GetOptions(
 	'help|?' => \$help,
 	'eprintid=i' => \$specific_eprintid,
 	'verbose+' => \$verbose,
@@ -49,21 +49,21 @@ sub oo_is_running
 sub valid_pdf
 {
 	my( $filename ) = @_;
-	
+
 	open( my $fh, '<:raw', $filename ) || return;
 	binmode( $fh );
-	
+
 	my $buf;
-	
+
 	# Read in four bytes, failing if we can't do that.
-	
+
 	if( sysread( $fh, $buf, 4 ) != 4 )
 	{
 		return;
 	}
-	
+
 	# Compare the first four bytes to "%PDF"
-	
+
 	return $buf eq "%PDF";
 }
 
@@ -163,7 +163,7 @@ sub prepare_pages
 
 			unless( -e "$temp_dir/$coversheet_page.pdf" )
 			{
-				$status = "Failed to add coversheet to document '".$doc->get_id."'";
+				$status = "Failed to add coversheet to document '".$doc->get_id."' [coversheet_error 1]";
 				$control->{document_in_error} = 1;
 			}
 		}
@@ -261,22 +261,22 @@ sub process_coverdoc
 
 	if( !defined( $stored_file ))
 	{
-		$control->{document_in_error} = 1;
-		return "There is no stored file";
+		$control->{document_in_error} = 2;
+		return "There is no stored file [coversheet_error 2]";
 	}
 
 	my $doc_path = $stored_file->get_local_copy();
 
 	if( !defined( $doc_path ))
 	{
-		$control->{document_in_error} = 1;
-		return "Cannot locate local copy of document";
+		$control->{document_in_error} = 3;
+		return "Cannot locate local copy of document [coversheet_error 3]";
 	}
 
 	if( !valid_pdf( $doc_path ) )
 	{
-		$control->{document_in_error} = 1;
-		return "Stored document is not a PDF file.";
+		$control->{document_in_error} = 4;
+		return "Stored document is not a PDF file. [coversheet_error 4]";
 	}
 
 	my @input_files;
@@ -287,7 +287,7 @@ sub process_coverdoc
 	my $temp_output_dir = File::Temp->newdir( "ep-coversheet-finishedXXXX", TMPDIR => 1 );
 	my $temp_output_file = $temp_dir.'/temp.pdf';
 
-	# EPrints Services/pjw Modification to use Ghostscript rather than pdftk 
+	# EPrints Services/pjw Modification to use Ghostscript rather than pdftk
 	my $gs_cmd = $session->get_repository->get_conf( "gs_pdf_stich_cmd" );
 	# add the output file
 	$gs_cmd .= $temp_output_file;
@@ -307,9 +307,9 @@ sub process_coverdoc
 	}
 	else
 	{
-		$session->log("[Convert::AddCoversheet] Ghostscript could not create '$output_file'. Check the PDF is not password-protected.");
-		$control->{document_in_error} = 1;
-		return "Could not create the coversheet version of the document";
+		$session->log("[Convert::AddCoversheet] Ghostscript could not create '$output_file'. Check the PDF is not password-protected. [coversheet_error 5]");
+		$control->{document_in_error} = 5;
+		return "Could not create the coversheet version of the document [coversheet_error 5]";
 	}
 
 	EPrints::Utils::chown_for_eprints( $output_file );
@@ -324,9 +324,9 @@ sub process_coverdoc
 
 	unless( open($fh, "<", $output_file) )
 	{
-		$session->get_repository->log( "Error reading from $output_file: $!" );
-		$control->{document_in_error} = 1;
-		return "Couldn't read file";
+		$session->get_repository->log( "Error reading from $output_file: $! [coversheet_error 6]" );
+		$control->{document_in_error} = 6;
+		return "Couldn't read file [coversheet_error 6]";
 	}
 
 	$session->run_trigger( EPrints::Const::EP_TRIGGER_MEDIA_INFO,
@@ -346,7 +346,7 @@ sub process_coverdoc
 
 	my $doc_ds = $session->dataset( "document" );
 	$doc->get_eprint->set_under_construction( 1 );
-	my $new_doc = $doc_ds->create_object( $session, { 
+	my $new_doc = $doc_ds->create_object( $session, {
 		files => \@filedata,
 		main => $filename,
 		eprintid => $eprint->get_id,
@@ -366,12 +366,12 @@ sub process_coverdoc
 	} );
 	$doc->get_eprint->set_under_construction( 0 );
 
-	close( $fh );	
+	close( $fh );
 
 	if( !defined $new_doc )
 	{
-		$session->log( "Failed to create document object during conversion: check your storage configuration" );
-		$control->{document_in_error} = 1;
+		$session->log( "Failed to create document object during conversion: check your storage configuration [coversheet_error 7]" );
+		$control->{document_in_error} = 7;
 		return ();
 	}
 
@@ -393,11 +393,11 @@ sub process_coverdoc
 	# which will generate a new coversheet
 	$newcoverdoc->set_value( "security", $doc->get_value( "security" ) );
 	$newcoverdoc->commit;
-	
+
 	# record which coversheet was used
 	$doc->set_value( 'coversheetid', $coversheet->get_id );
 	$doc->commit;
-	
+
 	$doc->get_eprint->set_under_construction( 0 );
 
 	return undef;
