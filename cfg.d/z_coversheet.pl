@@ -7,7 +7,7 @@ $c->{plugins}{"Screen::Coversheet::Deprecate"}{params}{disable} = 0;
 $c->{plugins}{"Screen::Coversheet::Edit"}{params}{disable} = 0;
 $c->{plugins}{"Screen::Coversheet::New"}{params}{disable} = 0;
 $c->{plugins}{"Screen::EPMC::Coversheet"}{params}{disable} = 0;
-
+$c->{plugins}{"Screen::EPrint::Staff::Coversheet"}{params}{disable} = 0;
 
 
 # Stores the id of the Coversheet Dataobj that was used to generated the CS'ed document

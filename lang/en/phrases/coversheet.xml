@@ -81,6 +81,11 @@
 <epp:phrase id="Plugin/Screen/Coversheet/Activate:title">Activate Coversheet</epp:phrase>
 <epp:phrase id="Plugin/Screen/Coversheet/New:action:create:title">Create New Coversheet</epp:phrase>
 
+<epp:phrase id="Plugin/Screen/EPrint/Staff/Coversheet:action:update:title">Update Coversheet</epp:phrase>
+<epp:phrase id="Plugin/Screen/EPrint/Staff/Coversheet:action:update:description">Force the coversheets to be regenerated on all documents for this item that can be coversheeted.</epp:phrase>
+<epp:phrase id="Plugin/Screen/EPrint/Staff/Coversheet:updating_coversheet">All documents associated with this item that can be coversheeted have been set to have their coversheets regenerated.  It may take some time for this to happen.</epp:phrase>
+<epp:phrase id="Plugin/Screen/EPrint/Staff/Coversheet:coversheet_not_updated">Could not update coversheets for documents of this item.</epp:phrase>
+
 <epp:phrase id='current_file'>Current File: </epp:phrase>
 <epp:phrase id='upload_file'>Upload New File: </epp:phrase>
 
