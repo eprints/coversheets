@@ -1,0 +1,103 @@
+#!/usr/bin/perl -w 
+
+use FindBin;
+use lib "$FindBin::Bin/../../../perl_lib";
+
+use strict;
+use EPrints;
+
+use Getopt::Long;
+
+my $quiet = 0;
+my $verbose = 0;
+my $help = 0;
+
+GetOptions(
+	'quiet' => \$quiet,
+        'verbose' => \$verbose,
+        'help|?' => \$help,
+) || usage() ;
+
+if( $help )
+{
+        usage();
+}
+
+if( scalar( @ARGV ) != 1 )
+{
+        usage();
+}
+
+my $session = new EPrints::Session( 1, $ARGV[0] ) or die("cant create Session object");
+
+my $eprints = $session->dataset( 'eprint' )->search;
+
+my $active_coversheets = $session->dataset( 'coversheet' )->search(
+	filters => [
+		{ meta_fields => [qw( status )], value => 'active' },
+	],
+        custom_order => '-apply_priority/-coversheetid',
+);
+
+my $counter = 0;
+
+$eprints->map(sub {
+	my ( $session, $dataset, $eprint ) = @_;
+
+	return if $eprint->get_value( 'coversheets_dirty' ) && $eprint->get_value( 'coversheets_dirty' ) eq 'TRUE';
+	my $docs = $eprint->get_all_documents;
+
+	print "Checking coversheet_ids for eprint #".$eprint->id."\n" if $verbose;
+	my $changed = 0;
+	foreach my $doc ( $eprint->get_all_documents )
+	{
+		if ( $doc->get_value( 'mime_type' ) &&  $doc->get_value( 'mime_type' ) eq 'application/pdf' )
+		{
+			my $doc_cur_csid = $doc->get_value( 'coversheetid' ) || '';
+			my $doc_new_csid = '';
+        		foreach my $possible_cs ( $active_coversheets->get_records )
+        		{
+    		        	if( $possible_cs->applies_to_eprint( $eprint ) )
+                	  	{
+                        		$doc_new_csid = $possible_cs->id;
+                        		last;	
+				}
+			}
+			if ( $doc_cur_csid ne $doc_new_csid )
+			{
+				$doc->set_value( 'coversheetid', $doc_new_csid ) if $doc_new_csid;
+				$doc->set_value( 'coversheetid', undef ) unless $doc_new_csid;
+				$doc->set_value( 'coversheet_error', undef );
+				$doc->commit;
+				$changed = 1;
+			}
+                }
+        }
+
+	if ( $changed )
+	{
+		$eprint->set_value( 'coversheets_dirty', 'TRUE' );
+		$eprint->commit;
+		print "Coversheet template to use changed for eprint #".$eprint->id."\n" unless $quiet;
+		$counter++;
+	}
+});
+
+print "\n$counter eprints have had their coversheets_dirty flag set to TRUE\n\n" unless $quiet;
+
+sub usage
+{
+        print <<USAGE;
+
+$0 <ARCHIVE_ID>
+
+\t--quiet      Enable quiet mode
+\t--verbose    Enable verbose mode
+\t--help       Show this help
+
+USAGE
+
+	exit( 1 );
+}
+
+1;
