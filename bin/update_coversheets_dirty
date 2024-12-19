@@ -8,11 +8,13 @@ use EPrints;
 
 use Getopt::Long;
 
+my $unset_errors = 0;
 my $quiet = 0;
 my $verbose = 0;
 my $help = 0;
 
 GetOptions(
+	'unset_errors' => \$unset_errors,
         'quiet' => \$quiet,
         'verbose' => \$verbose,
         'help|?' => \$help,
@@ -60,7 +62,7 @@ $coversheets->map(sub {
 	$documents->map(sub{
 		my( $session, $dataset, $document ) = @_;
 
-		if ( defined $document->get_value( 'coversheet_error') && ( $document->get_value( 'coversheet_error') eq "1" || $document->get_value( 'coversheet_error') eq "TRUE" ) )
+		if ( $unset_errors && defined $document->get_value( 'coversheet_error') && ( $document->get_value( 'coversheet_error') eq "1" || $document->get_value( 'coversheet_error') eq "TRUE" ) )
 		{
 			print "Unsetting coversheet_error for document #".$document->id." for eprint #".$document->get_value( 'eprintid' )."\n" unless $quiet;
 			$document->set_value( "coversheet_error", undef );
@@ -86,9 +88,10 @@ sub usage
 
 $0 <ARCHIVE_ID>
 
-\t--quiet      Enable quiet mode
-\t--verbose    Enable verbose mode
-\t--help       Show this help
+\t--unset_errors   Unsets coversheet_error on documents
+\t--quiet          Enable quiet mode
+\t--verbose        Enable verbose mode
+\t--help           Show this help
 
 USAGE
 
