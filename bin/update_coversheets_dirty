@@ -62,11 +62,18 @@ $coversheets->map(sub {
 	$documents->map(sub{
 		my( $session, $dataset, $document ) = @_;
 
-		if ( $unset_errors && defined $document->get_value( 'coversheet_error') && ( $document->get_value( 'coversheet_error') eq "1" || $document->get_value( 'coversheet_error') eq "TRUE" ) )
+		if ( $document->get_value( 'coversheet_error' ) && ( $document->get_value( 'coversheet_error' ) eq "1" || $document->get_value( 'coversheet_error' ) eq "TRUE" ) )
 		{
-			print "Unsetting coversheet_error for document #".$document->id." for eprint #".$document->get_value( 'eprintid' )."\n" unless $quiet;
-			$document->set_value( "coversheet_error", undef );
-			$document->commit;
+			if ( $unset_errors )
+			{
+				print "Unsetting coversheet_error for document #".$document->id." for eprint #".$document->get_value( 'eprintid' )."\n" unless $quiet;
+				$document->set_value( "coversheet_error", undef );
+				$document->commit;
+			}
+			else
+			{
+				return;
+			}
 		}
 		my $eprint = $document->get_eprint;
 		return if $eprint->get_value( 'coversheets_dirty' ) eq "TRUE";
