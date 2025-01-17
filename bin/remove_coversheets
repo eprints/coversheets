@@ -10,7 +10,7 @@ if( !defined $ARGV[0] )
 {
 	print "\nUsage:";
 	print "\n\t$0 <ARCHIVE_ID> [eprintid,eprintid,eprintid]\n\n";
-	print "\nE.g.\n\y$0 my_archive\n\t$0 my_archive 1,2,3,4\n\n";
+	print "\nE.g.\n\t$0 my_archive\n\t$0 my_archive 1,2,3,4\n\n";
 	exit(1);
 }
 
