@@ -3,9 +3,11 @@ COSDictionary
 COSName
 COSObject
 COSParser
+Corrupt array element at offset
 Fatal Python error: PyImport_GetModuleDict: no module dictionary!
 Invalid dictionary, found: ')' but expected: '/' at offset
 Invalid stream length: 0, stream start position:
+Invalid value(s) for an object key
 Leaking python objects bridged to UNO for reason pyuno runtime is not initialized, (the pyuno.bootstrap needs to be called before using any uno classes)
 Numbers array has odd size
 PDNumberTreeNode
