@@ -1,7 +1,6 @@
 # Bazaar Configuration
 
 $c->{plugins}{"Convert::AddCoversheet"}{params}{disable} = 0;
-$c->{plugins}{"Event::AddCoversheet"}{params}{disable} = 0;
 $c->{plugins}{"Screen::Coversheet::Activate"}{params}{disable} = 0;
 $c->{plugins}{"Screen::Coversheet::Deprecate"}{params}{disable} = 0;
 $c->{plugins}{"Screen::Coversheet::Edit"}{params}{disable} = 0;
