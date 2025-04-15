@@ -55,37 +55,42 @@ E.g.
 bin/disable_coversheets my_archive 3600
 ```
 
-#### For Specific EPrint records
-If there is a specific eprint record for which you want to update its PDF documents, then you can use a slightly modified version of the `check_coversheets` command:
+#### For Specific EPrint
+If there is a specific eprint record that you want to add/update its PDF documents' coversheets, then you can use a slightly modified version of the `check_coversheets` command:
 
 ```
 bin/check_coversheets <ARCHIVE_ID> <LIMIT> [--eprintid=EPRINT_ID]
 ```
-Let us say you want to update coversheets for eprint with ID 1234 for your archived called `my_archive`, then command would be:
+Let us say you want to update coversheets for the eprint with ID 1234 for your archive called `my_archive`, then command would be:
 
 ```
 bin/check_coversheets my_archive 1 --eprintid=1234
 ```
 
+### For Specific Document
+If there is a specific PDF document of an eprint record that you want to add/update its coversheet, then you can again use a slightly modified version of the `check_coversheets` command:
 
-### Add Coversheets to Specific Documents
-
-Generally, you should use the `check_coversheets` script to just update all PDF documents for a specific eprint but if you have some reason you only want to update a particular PDF document you can use the following command:
 ```
-bin/add_coversheet <ARCHIVE_ID> <DOCUMENT_ID>
+bin/check_coversheets <ARCHIVE_ID> <LIMIT> [--docid=DOCUMENT_ID]
 ```
 This will use the specific coversheet template whose criteria is applicable to the document's associated eprint record.  
+
+Let us say you want to update coversheet for document with ID 5678 for your archive called `my_archive`, then command would be:
+
+```
+bin/check_coversheets my_archive 1 --docid=5678
+```
 
 
 ### Remove Coversheets 
 
 You might decide that you no longer want to use coversheets and want to remove all coversheeted PDFs to save disk space.  You can use this command to remove all of these coversheeted PDF files:
 ```
-bin/delete_coversheets <ARCHIVE_ID>
+bin/remove_coversheets <ARCHIVE_ID>
 ```
-Alternatively, if some EPrints no longer need coversheets due to a change in the criteria for a coversheet template and these do not get tidied up in good time automatically, thenyou can removed coversheets from the documents of one of more individual eprint records. (Make sure there are no spaces between each eprint ID).  E.g. 
+Alternatively, if some EPrints no longer need coversheets due to a change in the criteria for a coversheet template and these do not get tidied up in good time automatically, then you can remove coversheets from the documents of one of more individual eprint records. (Make sure there are no spaces between each eprint ID).  E.g. 
 ```
-bin/delete_coversheets my_archive 1,2,3,4
+bin/remove_coversheets my_archive 1,2,3,4
 ```
 
 

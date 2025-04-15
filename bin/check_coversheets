@@ -19,11 +19,13 @@ use File::Slurp;
 use HTML::Entities;
 
 my $help = 0;
+my $specific_docid;
 my $specific_eprintid;
 my $verbose = 0;
 
 GetOptions(
 	'help|?' => \$help,
+	'docid=i' => \$specific_docid,
 	'eprintid=i' => \$specific_eprintid,
 	'verbose+' => \$verbose,
 ) || usage() ;
@@ -422,6 +424,19 @@ my $search = EPrints::Search->new(
 	limit => $limit
 );
 
+my $specific_doc;
+if ( defined $specific_docid )
+{
+	my $doc_ds = $session->dataset( 'document' );
+	$specific_doc = $doc_ds->dataobj( $specific_docid );
+	unless ( defined $specific_doc )
+	{
+		print "No document with ID $specific_docid\n";
+		exit( 1 );
+	}
+	$specific_eprintid = $specific_doc->get_value( 'eprintid' );
+}
+
 if( defined $specific_eprintid )
 {
 	$search->add_field( $ds->get_field( "eprintid" ), $specific_eprintid );
@@ -437,15 +452,15 @@ $list->map( sub {
 
 	my( $session, $ds, $eprint ) = @_;
 
-	my @docs = $eprint->get_all_documents;
 	my $eprint_id = $eprint->get_value( 'eprintid' );
+	my @docs = $specific_docid ? ( $specific_doc ) : $eprint->get_all_documents;
 
 	print "--> Processing eprint $eprint_id:\n" if $verbose;
 
 	my $errors_detected = 0;
 	my $pipeline_error_detected = 0;
 
-	foreach my $doc ( $eprint->get_all_documents )
+	foreach my $doc ( @docs )
 	{
 		my $control = { document_in_error => 0 };
 
