@@ -695,14 +695,31 @@ sub get_coversheet_doc
 	if (defined $doc)
 	{
 		# get related documents
-		my $related_docs_list = $doc->search_related( "isCoversheetVersionOf" );
+		my $related_docs_list = $doc->search_related( "isCoversheetVersionOf", "-docid", 1 ); # If < EPrints 3.4.7, then last two arguments will be ignored.
 		if ($related_docs_list->count)
 		{
 			# there should be only one (in true highlander fashion)
 			# but get the latest just in case there has been
 			# some issue with the indexer for example.
-			my $ordered_docs = $related_docs_list->reorder( "-docid" );
-			$coverdoc = $ordered_docs->item( 0 );
+
+			# If only one result or limit worked due to being EPrints 3.4.7+
+			if ( $related_docs_list->count == 1 )
+			{
+				$coverdoc = $related_docs_list->item( 0 );
+			}
+			else
+			{
+				my $max_docid = 0;
+				for ( my $d = 0; $d < $related_docs_list->count; $d++ )
+				{
+					my $cur_coverdoc = $related_docs_list->item( $d );
+					if ( $cur_coverdoc->id > $max_docid )
+					{
+						$coverdoc = $cur_coverdoc;
+						$max_docid = $cur_coverdoc->id;
+					}
+				}
+			}
 		}
 	}
 	return $coverdoc;
