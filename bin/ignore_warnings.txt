@@ -13,9 +13,11 @@ MYSQL_OPT_RECONNECT
 Numbers array has odd size
 PDNumberTreeNode
 The end of the stream doesn't point to the correct offset
+The end of the stream is out of range, using workaround to read the stream
 Use of uninitialized value in lc at /usr/local/share/perl5/OpenOffice/OODoc/File.pm line 378.
 endobj
 found wrong object number
+invalid object number value =0 at offset
 hasSelfReference
 parseCOSDictionaryNameValuePair
 parseCOSStream
