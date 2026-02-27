@@ -9,12 +9,14 @@ use EPrints;
 use Getopt::Long;
 
 my $unset_errors = 0;
+my $force = 0;
 my $quiet = 0;
 my $verbose = 0;
 my $help = 0;
 
 GetOptions(
-	'unset_errors' => \$unset_errors,
+		'unset-errors' => \$unset_errors,
+		'force' => \$force,
         'quiet' => \$quiet,
         'verbose' => \$verbose,
         'help|?' => \$help,
@@ -32,6 +34,16 @@ if( scalar( @ARGV ) != 1 )
 
 my $session = new EPrints::Session( 1, $ARGV[0] ) or die("cant create Session object");
 
+my $update_dirty_ts_file = $session->config( "variables_path" ) . "/coversheets_update_dirty.timestamp";
+my $hashes_ts_file = $session->config( "variables_path" ) . "/coversheets_hashes.timestamp";
+my $update_dirty_ts = -f $update_dirty_ts_file ? EPrints::Utils::mtime( $update_dirty_ts_file ) : 0;
+my $hashes_ts = -f $hashes_ts_file ? EPrints::Utils::mtime( $hashes_ts_file ) : 0;
+if ( $hashes_ts < $update_dirty_ts && ! $force )
+{
+    print "\nNOTICE: Coversheet front and back file hashes have not been changed since the last time update_coversheets_dirty ran.  To run anyway add --force option.\n\n" unless $quiet;
+    exit;
+}
+
 my $cs_ds = $session->dataset( 'coversheet' );
 my $cs_search_exp = $cs_ds->prepare_search();
 $cs_search_exp->add_field(
@@ -47,8 +59,8 @@ $coversheets->map(sub {
 	my ( $session, $dataset, $coversheet ) = @_;
 
 	print "Checking eprints needing coversheets_dirty set for coversheet #".$coversheet->id."\n" if $verbose;
-        my $cs_ff_hash = $coversheet->get_value( 'frontfile_hash' ) || '';
-        my $cs_bf_hash = $coversheet->get_value( 'backfile_hash' ) || '';
+	my $cs_ff_hash = $coversheet->get_value( 'frontfile_hash' ) || '';
+	my $cs_bf_hash = $coversheet->get_value( 'backfile_hash' ) || '';
 
 	my $doc_ds = $session->dataset( 'document' );
 	my $search_exp = $doc_ds->prepare_search();
@@ -87,6 +99,10 @@ $coversheets->map(sub {
 	});
 });
 
+open(my $fh_ts, ">:raw", $update_dirty_ts_file) or EPrints::abort( "Can't write to $update_dirty_ts_file: $!" );
+print $fh_ts EPrints::Time::human_time();
+close($fh_ts);
+
 print "\n$counter eprints have had their coversheets_dirty flag set to TRUE\n\n" unless $quiet;
 
 sub usage
@@ -95,7 +111,8 @@ sub usage
 
 $0 <ARCHIVE_ID>
 
-\t--unset_errors   Unsets coversheet_error on documents
+\t--unset-errors   Unsets coversheet_error on documents
+\t--force          Run even if coversheet front/back file hashes have not changed
 \t--quiet          Enable quiet mode
 \t--verbose        Enable verbose mode
 \t--help           Show this help

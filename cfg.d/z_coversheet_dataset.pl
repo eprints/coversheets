@@ -732,16 +732,21 @@ sub calculate_coverdata_hash
 	my $tags = $session->config( 'coversheet', 'tags' );
 	my $message = "";
 
-	foreach my $tag (keys %{$tags})
+	# Sort keys to ensure same ordering or message string to be hashed
+	foreach my $tag (sort keys %{$tags})
 	{
 		eval
 		{
 			my $tag_value = $tags->{$tag} ($eprint, $doc);
 
+			# Ensure consistent whitespace for 'citation' and similar tags
+			$tag_value =~ s/^\s+|\s+$//g; # No leading or trailing whitespace
+			$tag_value =~ s/\s\s+/ /g; # No multiple spaces
+
 			$message .= "##" . $tag . "##" . $tag_value;
 		};
 	}
-
+	print STDERR "\nmessage: $message\n\n";
 	return sha1_hex( Encode::encode_utf8( $message ));
 }
 

@@ -115,3 +115,32 @@ $c->add_dataset_trigger( "eprint", EPrints::Const::EP_TRIGGER_BEFORE_COMMIT, sub
 	$eprint->set_value( "coversheets_dirty", $coversheets_dirty );
 	
 }, priority => 500 );
+
+
+$c->add_dataset_trigger( "coversheet", EPrints::Const::EP_TRIGGER_BEFORE_COMMIT, sub {
+
+    my( %params ) = @_;
+
+    my $session = $params{repository};
+    my $coversheet = $params{dataobj};
+	my $changed = $params{changed};
+
+	# If a coversheet has been activated or deprecated or if its priority or what is applied to has changed them update coversheets_application.timestamp
+	if ( $changed->{status} || $changed->{apply_to} || $changed->{apply_priority} )
+	{
+		my $application_ts_file = $session->config( "variables_path" ) . "/coversheets_application.timestamp";
+        open(my $afh_ts, ">:raw", $application_ts_file) or EPrints::abort( "Can't write to $application_ts_file: $!" );
+        print $afh_ts EPrints::Time::human_time();
+        close($afh_ts);
+	}
+
+	# If a coversheet is active and the front/back file hash has changed then update coversheets_hashes.timestamp
+	if ( $coversheet->get_value( 'status' ) eq "active" && ( $changed->{frontfile_hash} || $changed->{backfile_hash} ) )
+	{
+		my $hashes_ts_file = $session->config( "variables_path" ) . "/coversheets_hashes.timestamp";
+		open(my $hfh_ts, ">:raw", $hashes_ts_file) or EPrints::abort( "Can't write to $hashes_ts_file: $!" );
+		print $hfh_ts EPrints::Time::human_time();
+		close($hfh_ts);
+	}
+
+}, priority => 100 );

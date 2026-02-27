@@ -94,11 +94,26 @@ bin/remove_coversheets my_archive 1,2,3,4
 ```
 
 
-### Update Coversheet-related Metadata
-If you have only just started using coversheets then updating coversheet-related metadata should not be necessary.  However, if you were using an old version of coversheets, such as the on available in the [EPrints Bazaar](https://bazaar.eprints.org/350/), then you will want to run the following command to make sure all the metadata is in the correct format:
+### Upgrade Coversheet-related Metadata
+If you have only just started using coversheets then upgrading coversheet-related metadata should not be necessary.  However, if you were using an old version of coversheets, such as the on available in the [EPrints Bazaar](https://bazaar.eprints.org/350/), then you will want to run the following command to make sure all the metadata is in the correct format:
 ```
-bin/update_coversheet_data <ARCHIVE_ID>
+bin/upgrade_coversheet_data <ARCHIVE_ID>
 ```
+
+
+### Update Coversheets Marked as Dirty
+
+Changes to coversheet records will not automatically prompt documents that use that coversheet to be updated.  The following two scripts check to see whether documents need to have their coversheets set to dirty so they can be regenerated based on certain changes to coversheet records:
+
+1. bin/update_coversheets_dirty - Tests if the front or back (coversheet template) files have changed and makes dirty documents that use that particualar coversheet record.
+2. bin/check_documents_coversheetid - Tests if what a coversheet should apply to or its apply priority has changed as well as if the coversheet has changed status so it should or should no longer be applied.  If so, all affected documents are marked as dirty of coversheet regeneration.
+
+The best way to make use of these scripts are to run the as a cron job like below:
+
+*/55 * * * * /opt/eprints3/ingredients/coversheets/bin/update_coversheets_dirty my_archive --quiet && /opt/eprints3/ingredients/coversheets/bin/check_documents_coversheetid my_archive --quiet
+
+This will only run once an hour so it may take a while between making changes to a coversheet template and seeing records coversheets being updated.  This could be run more frequently but just in case of an unusual side effects it was decided to limit the changes this will be running at the same time as check_coversheets.
+
 
 
 ## Further Information

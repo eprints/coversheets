@@ -8,14 +8,16 @@ use EPrints;
 
 use Getopt::Long;
 
+my $force = 0;
 my $quiet = 0;
 my $verbose = 0;
 my $help = 0;
 
 GetOptions(
+	'force' => \$force,
 	'quiet' => \$quiet,
-        'verbose' => \$verbose,
-        'help|?' => \$help,
+	'verbose' => \$verbose,
+	'help|?' => \$help,
 ) || usage() ;
 
 if( $help )
@@ -29,6 +31,16 @@ if( scalar( @ARGV ) != 1 )
 }
 
 my $session = new EPrints::Session( 1, $ARGV[0] ) or die("cant create Session object");
+
+my $check_id_ts_file = $session->config( "variables_path" ) . "/coversheets_check_id.timestamp";
+my $application_ts_file = $session->config( "variables_path" ) . "/coversheets_application.timestamp";
+my $check_id_ts = -f $check_id_ts_file ? EPrints::Utils::mtime( $check_id_ts_file ) : 0;
+my $application_ts = -f $application_ts_file ? EPrints::Utils::mtime( $application_ts_file ) : 0;
+if ( $application_ts < $check_id_ts && ! $force )
+{
+	print "\nNOTICE: Coversheet statuses and applications have not been changed since the last time check_documents_coversheetid ran.  To run anyway add --force option.\n\n" unless $quiet;
+	exit;
+}
 
 my $eprints = $session->dataset( 'eprint' )->search;
 
@@ -85,12 +97,18 @@ $eprints->map(sub {
 
 print "\n$counter eprints have had their coversheets_dirty flag set to TRUE\n\n" unless $quiet;
 
+open(my $fh_ts, ">:raw", $check_id_ts_file) or EPrints::abort( "Can't write to $check_id_ts_file: $!" );
+print $fh_ts EPrints::Time::human_time();
+close($fh_ts);
+
+
 sub usage
 {
         print <<USAGE;
 
 $0 <ARCHIVE_ID>
 
+\t--force      Check even if coversheet records have not been updated since this script was last called
 \t--quiet      Enable quiet mode
 \t--verbose    Enable verbose mode
 \t--help       Show this help
